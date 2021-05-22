@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, MagicHash, BangPatterns #-}
+{-# LANGUAGE BinaryLiterals #-}
 
 -- |
 -- Module      : Data.Text.Internal.Encoding.Utf8
@@ -35,10 +36,10 @@ module Data.Text.Internal.Encoding.Utf8
     , validate4
     ) where
 
-import Data.Bits ((.&.), shiftR)
+import Data.Bits (Bits(..), FiniteBits(..))
 import Data.Char (ord)
 import GHC.Exts
-import GHC.Word (Word8(..))
+import GHC.Word (Word8(..), Word64)
 
 #if !MIN_VERSION_base(4,16,0)
 -- harmless to import, except for warnings that it is unused.
@@ -54,13 +55,28 @@ between :: Word8                -- ^ byte to check
 between x y z = x >= y && x <= z
 {-# INLINE between #-}
 
--- TODO make branchless by looking into Word64 by clz (ord c)
+-- This is a branchless version of
+-- utf8Length c
+--   | ord c < 0x80    = 1
+--   | ord c < 0x800   = 2
+--   | ord c < 0x10000 = 3
+--   | otherwise       = 4
+--
+-- We want to return
+-- * 1 for codepoints, consisting of  0-7  bits,
+-- * 2 for codepoints, consisting of  8-11 bits,
+-- * 3 for codepoints, consisting of 12-16 bits,
+-- * 4 for codepoints, consisting of 17+   bits.
 utf8Length :: Char -> Int
-utf8Length c
-  | ord c < 0x80    = 1
-  | ord c < 0x800   = 2
-  | ord c < 0x10000 = 3
-  | otherwise       = 4
+utf8Length c = word64ToInt $ 4 - (magic `unsafeShiftR` wordToInt (bitLength `shiftL` 1) .&. 3)
+  where
+    bitLength :: Word
+    bitLength = intToWord (finiteBitSize (0 :: Int)) - intToWord (countLeadingZeros (ord c))
+    -- This encodes a map from [0..31] (bit length of codepoint)
+    -- to {0,1,2,3} (= 4 - number of bytes for UTF-8 encoding).
+    magic :: Word64
+    magic = 0b0101010101101010101111111111111111
+{-# INLINE utf8Length #-}
 
 utf8LengthByLeader :: Word8 -> Int
 utf8LengthByLeader w
@@ -183,3 +199,12 @@ validate4 x1 x2 x3 x4 = validate4_1 || validate4_2 || validate4_3
 
 intToWord8 :: Int -> Word8
 intToWord8 = fromIntegral
+
+intToWord :: Int -> Word
+intToWord = fromIntegral
+
+word64ToInt :: Word64 -> Int
+word64ToInt = fromIntegral
+
+wordToInt :: Word -> Int
+wordToInt = fromIntegral
