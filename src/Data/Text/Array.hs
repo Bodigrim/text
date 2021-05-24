@@ -31,6 +31,7 @@ module Data.Text.Array
     , shrinkM
     , copyM
     , copyI
+    , copyP
     , empty
     , equal
     , compare
@@ -249,6 +250,22 @@ copyI count@(I# count#) (MutableByteArray dst#) dstOff@(I# dstOff#) (ByteArray s
     case copyByteArray# src# srcOff# dst# dstOff# count# s1# of
       s2# -> (# s2#, () #)
 {-# INLINE copyI #-}
+
+-- | Copy from pointer.
+copyP :: MArray s               -- ^ Destination
+      -> Int                    -- ^ Destination offset
+      -> Ptr Word8              -- ^ Source
+      -> Int                    -- ^ Count
+      -> ST s ()
+copyP (MutableByteArray dst#) dstOff@(I# dstOff#) (Ptr src#) count@(I# count#)
+#if defined(ASSERTS)
+  | count < 0 = error $
+    "copyP: count must be >= 0, but got " ++ show count
+#endif
+  | otherwise = ST $ \s1# ->
+    case copyAddrToByteArray# src# dst# dstOff# count# s1# of
+      s2# -> (# s2#, () #)
+{-# INLINE copyP #-}
 
 -- | Compare portions of two arrays for equality.  No bounds checking
 -- is performed.
