@@ -59,9 +59,9 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 -- | A space efficient, packed, unboxed Unicode text type.
 data Text = Text
-    {-# UNPACK #-} !A.Array          -- payload (Word16 elements)
-    {-# UNPACK #-} !Int              -- offset (units of Word16, not Char)
-    {-# UNPACK #-} !Int              -- length (units of Word16, not Char)
+    {-# UNPACK #-} !A.Array          -- bytearray encoded as UTF-8
+    {-# UNPACK #-} !Int              -- offset in bytes (not in Char!)
+    {-# UNPACK #-} !Int              -- length in bytes (not in Char!)
     deriving (Typeable, TH.Lift)
 
 -- | Smart constructor.
@@ -131,7 +131,7 @@ showText (Text arr off len) =
 
 -- | Map a 'Char' to a 'Text'-safe value.
 --
--- UTF-16 surrogate code points are not included in the set of Unicode
+-- Unicode 'Data.Char.Surrogate' code points are not included in the set of Unicode
 -- scalar values, but are unfortunately admitted as valid 'Char'
 -- values by Haskell.  They cannot be represented in a 'Text'.  This
 -- function remaps those code points to the Unicode replacement

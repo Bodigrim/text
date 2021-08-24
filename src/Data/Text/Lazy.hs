@@ -255,7 +255,8 @@ import GHC.Stack (HasCallStack)
 -- points
 -- (<http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf#page=13 §3.4, definition D10 >)
 -- as 'Char' values, including code points from this invalid range.
--- This means that there are some 'Char' values that are not valid
+-- This means that there are some 'Char' values
+-- (corresponding to 'Data.Char.Surrogate' category) that are not valid
 -- Unicode scalar values, and the functions in this module must handle
 -- those cases.
 --
@@ -264,12 +265,7 @@ import GHC.Stack (HasCallStack)
 -- that are not valid Unicode scalar values with the replacement
 -- character \"&#xfffd;\" (U+FFFD).  Functions that perform this
 -- inspection and replacement are documented with the phrase
--- \"Performs replacement on invalid scalar values\".
---
--- (One reason for this policy of replacement is that internally, a
--- 'Text' value is represented as packed UTF-16 data. Values in the
--- range U+D800 through U+DFFF are used by UTF-16 to denote surrogate
--- code points, and so cannot be represented. The functions replace
+-- \"Performs replacement on invalid scalar values\". The functions replace
 -- invalid scalar values, instead of dropping them, as a security
 -- measure. For details, see
 -- <http://unicode.org/reports/tr36/#Deletion_of_Noncharacters Unicode Technical Report 36, §3.5 >.)
@@ -1047,9 +1043,9 @@ dropEnd n t0
                     T.dropEnd (int64ToInt m) t : ts
       where l = intToInt64 (T.length t)
 
--- | /O(n)/ 'dropWords' @n@ returns the suffix with @n@ 'Word16'
+-- | /O(n)/ 'dropWords' @n@ returns the suffix with @n@ 'Word8'
 -- values dropped, or the empty 'Text' if @n@ is greater than the
--- number of 'Word16' values present.
+-- number of 'Word8' values present.
 dropWords :: Int64 -> Text -> Text
 dropWords i t0
     | i <= 0    = t0
@@ -1171,7 +1167,7 @@ splitAt = loop
          where len = intToInt64 (T.length t)
 
 -- | /O(n)/ 'splitAtWord' @n t@ returns a strict pair whose first
--- element is a prefix of @t@ whose chunks contain @n@ 'Word16'
+-- element is a prefix of @t@ whose chunks contain @n@ 'Word8'
 -- values, and whose second is the remainder of the string.
 splitAtWord :: Int64 -> Text -> PairS Text Text
 splitAtWord _ Empty = empty :*: empty

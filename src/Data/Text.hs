@@ -297,7 +297,8 @@ import System.Posix.Types (CSsize(..))
 -- points
 -- (<http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf#page=13 §3.4, definition D10 >)
 -- as 'Char' values, including code points from this invalid range.
--- This means that there are some 'Char' values that are not valid
+-- This means that there are some 'Char' values
+-- (corresponding to 'Data.Char.Surrogate' category) that are not valid
 -- Unicode scalar values, and the functions in this module must handle
 -- those cases.
 --
@@ -306,12 +307,7 @@ import System.Posix.Types (CSsize(..))
 -- that are not valid Unicode scalar values with the replacement
 -- character \"&#xfffd;\" (U+FFFD).  Functions that perform this
 -- inspection and replacement are documented with the phrase
--- \"Performs replacement on invalid scalar values\".
---
--- (One reason for this policy of replacement is that internally, a
--- 'Text' value is represented as packed UTF-16 data. Values in the
--- range U+D800 through U+DFFF are used by UTF-16 to denote surrogate
--- code points, and so cannot be represented. The functions replace
+-- \"Performs replacement on invalid scalar values\". The functions replace
 -- invalid scalar values, instead of dropping them, as a security
 -- measure. For details, see
 -- <http://unicode.org/reports/tr36/#Deletion_of_Noncharacters Unicode Technical Report 36, §3.5 >.)
@@ -1319,7 +1315,7 @@ groupBy p = loop
         where Iter c d = iter t 0
               n     = d + findAIndexOrEnd (not . p c) (Text arr (off+d) (len-d))
 
--- | Returns the /array/ index (in units of 'Word16') at which a
+-- | Returns the /array/ index (in units of 'Word8') at which a
 -- character may be found.  This is /not/ the same as the logical
 -- index returned by e.g. 'findIndex'.
 findAIndexOrEnd :: (Char -> Bool) -> Text -> Int
