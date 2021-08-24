@@ -116,7 +116,7 @@ decodeASCII bs = withBS bs $ \fp len -> if len == 0 then Text A.empty 0 0 else r
     c_is_ascii src (src `plusPtr` len)
   if asciiPrefixLen == len
   then let !(SBS.SBS arr) = SBS.toShort bs in
-        return (Text (A.Array arr) 0 len)
+        return (Text (A.ByteArray arr) 0 len)
   else error $ "decodeASCII: detected non-ASCII codepoint at " ++ show asciiPrefixLen
 {-# DEPRECATED decodeASCII "Use decodeUtf8 instead" #-}
 
@@ -169,7 +169,7 @@ decodeUtf8With ::
 decodeUtf8With onErr bs
   | isValidBS bs =
     let !(SBS.SBS arr) = SBS.toShort bs in
-      (Text (A.Array arr) 0 (B.length bs))
+      (Text (A.ByteArray arr) 0 (B.length bs))
   | B.null undecoded = txt
   | otherwise = txt `append` (case onErr desc (Just (B.head undecoded)) of
     Nothing -> txt'
@@ -456,7 +456,7 @@ encodeUtf8 (Text arr off len)
   -- It would be easier to use Data.ByteString.Short.fromShort and slice later,
   -- but this is undesirable when len is significantly smaller than length arr.
   | otherwise = unsafeDupablePerformIO $ do
-    marr@(A.MArray mba) <- unsafeSTToIO $ A.newPinned len
+    marr@(A.MutableByteArray mba) <- unsafeSTToIO $ A.newPinned len
     unsafeSTToIO $ A.copyI marr 0 arr off len
     let fp = ForeignPtr (byteArrayContents# (unsafeCoerce# mba))
                         (PlainPtr mba)

@@ -65,12 +65,10 @@ import qualified Language.Haskell.TH.Lib as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
 -- | Immutable array type.
---
--- The 'Array' constructor is exposed since @text-1.1.1.3@
-data Array = Array { aBA :: ByteArray# }
+data Array = ByteArray ByteArray#
 
 instance TH.Lift Array where
-  lift a@(Array a#) = TH.appE (TH.appE (TH.varE 'fromAddr) addr) (TH.lift l)
+  lift a@(ByteArray a#) = TH.appE (TH.appE (TH.varE 'fromAddr) addr) (TH.lift l)
     where
       l = I# (sizeofByteArray# a#)
       addr = TH.litE $ TH.StringPrimL $ toList a 0 l
@@ -85,12 +83,10 @@ fromAddr addr (I# len) = runST $ ST $ \s1# ->
   case newByteArray# len s1# of
     (# s2#, marr #) -> case copyAddrToByteArray# addr marr 0# len s2# of
       s3# -> case unsafeFreezeByteArray# marr s3# of
-        (# s4#, arr #) -> (# s4#, Array arr #)
+        (# s4#, arr #) -> (# s4#, ByteArray arr #)
 
 -- | Mutable array type, for use in the ST monad.
---
--- The 'MArray' constructor is exposed since @text-1.1.1.3@
-data MArray s = MArray { maBA :: MutableByteArray# s }
+data MArray s = MutableByteArray (MutableByteArray# s)
 
 -- | Create an uninitialized mutable array.
 new :: forall s. Int -> ST s (MArray s)
@@ -100,7 +96,7 @@ new (I# len#)
 #endif
   | otherwise = ST $ \s1# ->
     case newByteArray# len# s1# of
-      (# s2#, marr# #) -> (# s2#, MArray marr# #)
+      (# s2#, marr# #) -> (# s2#, MutableByteArray marr# #)
 {-# INLINE new #-}
 
 -- | Create an uninitialized mutable pinned array.
@@ -111,14 +107,14 @@ newPinned (I# len#)
 #endif
   | otherwise = ST $ \s1# ->
     case newPinnedByteArray# len# s1# of
-      (# s2#, marr# #) -> (# s2#, MArray marr# #)
+      (# s2#, marr# #) -> (# s2#, MutableByteArray marr# #)
 {-# INLINE newPinned #-}
 
 newFilled :: Int -> Int -> ST s (MArray s)
 newFilled (I# len#) (I# c#) = ST $ \s1# ->
   case newByteArray# len# s1# of
     (# s2#, marr# #) -> case setByteArray# marr# 0# len# c# s2# of
-      s3# -> (# s3#, MArray marr# #)
+      s3# -> (# s3#, MutableByteArray marr# #)
 {-# INLINE newFilled #-}
 
 tile :: MArray s -> Int -> ST s ()
@@ -132,9 +128,9 @@ tile marr tileLen = do
 
 -- | Freeze a mutable array. Do not mutate the 'MArray' afterwards!
 unsafeFreeze :: MArray s -> ST s Array
-unsafeFreeze MArray{..} = ST $ \s1# ->
-    case unsafeFreezeByteArray# maBA s1# of
-        (# s2#, ba# #) -> (# s2#, Array ba# #)
+unsafeFreeze (MutableByteArray marr) = ST $ \s1# ->
+    case unsafeFreezeByteArray# marr s1# of
+        (# s2#, ba# #) -> (# s2#, ByteArray ba# #)
 {-# INLINE unsafeFreeze #-}
 
 -- | Unchecked read of an immutable array.  May return garbage or
@@ -144,21 +140,21 @@ unsafeIndex ::
   HasCallStack =>
 #endif
   Array -> Int -> Word8
-unsafeIndex a@Array{..} i@(I# i#) =
+unsafeIndex (ByteArray arr) i@(I# i#) =
 #if defined(ASSERTS)
-  let word8len = I# (sizeofByteArray# aBA) in
+  let word8len = I# (sizeofByteArray# arr) in
   if i < 0 || i >= word8len
   then error ("Data.Text.Array.unsafeIndex: bounds error, offset " ++ show i ++ ", length " ++ show word8len)
   else
 #endif
-  case indexWord8Array# aBA i# of r# -> (W8# r#)
+  case indexWord8Array# arr i# of r# -> (W8# r#)
 {-# INLINE unsafeIndex #-}
 
 -- sizeofMutableByteArray# is deprecated, because it is unsafe in the presence of
 -- shrinkMutableByteArray# and resizeMutableByteArray#.
 getSizeofMArray :: MArray s -> ST s Int
-getSizeofMArray ma@MArray{..} = ST $ \s0# ->
-  case getSizeofMutableByteArray# maBA s0# of
+getSizeofMArray (MutableByteArray marr) = ST $ \s0# ->
+  case getSizeofMutableByteArray# marr s0# of
     (# s1#, word8len# #) -> (# s1#, I# word8len# #)
 
 #if defined(ASSERTS)
@@ -177,11 +173,11 @@ unsafeWrite ::
   HasCallStack =>
 #endif
   MArray s -> Int -> Word8 -> ST s ()
-unsafeWrite ma@MArray{..} i@(I# i#) (W8# e#) =
+unsafeWrite ma@(MutableByteArray marr) i@(I# i#) (W8# e#) =
 #if defined(ASSERTS)
   checkBoundsM ma i 1 >>
 #endif
-  (ST $ \s1# -> case writeWord8Array# maBA i# e# s1# of
+  (ST $ \s1# -> case writeWord8Array# marr i# e# s1# of
     s2# -> (# s2#, () #))
 {-# INLINE unsafeWrite #-}
 
@@ -210,9 +206,9 @@ run2 k = runST (do
 {-# INLINE run2 #-}
 
 resizeM :: MArray s -> Int -> ST s (MArray s)
-resizeM ma@MArray{..} i@(I# i#) = ST $ \s1# ->
-  case resizeMutableByteArray# maBA i# s1# of
-    (# s2#, newArr #) -> (# s2#, MArray newArr #)
+resizeM (MutableByteArray marr) i@(I# i#) = ST $ \s1# ->
+  case resizeMutableByteArray# marr i# s1# of
+    (# s2#, newArr #) -> (# s2#, MutableByteArray newArr #)
 {-# INLINE resizeM #-}
 
 shrinkM ::
@@ -220,9 +216,9 @@ shrinkM ::
   HasCallStack =>
 #endif
   MArray s -> Int -> ST s ()
-shrinkM (MArray marr) i@(I# newSize) = do
+shrinkM (MutableByteArray marr) i@(I# newSize) = do
 #if defined(ASSERTS)
-  oldSize <- getSizeofMArray (MArray marr)
+  oldSize <- getSizeofMArray (MutableByteArray marr)
   if I# newSize > oldSize
     then error $ "shrinkM: shrink cannot grow " ++ show oldSize ++ " to " ++ show (I# newSize)
     else return ()
@@ -239,7 +235,7 @@ copyM :: MArray s               -- ^ Destination
       -> Int                    -- ^ Source offset
       -> Int                    -- ^ Count
       -> ST s ()
-copyM dst@(MArray dst#) dstOff@(I# dstOff#) src@(MArray src#) srcOff@(I# srcOff#) count@(I# count#)
+copyM dst@(MutableByteArray dst#) dstOff@(I# dstOff#) src@(MutableByteArray src#) srcOff@(I# srcOff#) count@(I# count#)
 #if defined(ASSERTS)
   | count < 0 = error $
     "copyM: count must be >= 0, but got " ++ show count
@@ -266,7 +262,7 @@ copyI :: MArray s               -- ^ Destination
       -> Int                    -- ^ Source offset
       -> Int                    -- ^ Count
       -> ST s ()
-copyI (MArray dst#) dstOff@(I# dstOff#) (Array src#) (I# srcOff#) count@(I# count#)
+copyI (MutableByteArray dst#) dstOff@(I# dstOff#) (ByteArray src#) (I# srcOff#) count@(I# count#)
 #if defined(ASSERTS)
   | count < 0 = error $
     "copyI: count must be >= 0, but got " ++ show count
@@ -282,7 +278,7 @@ copyP :: MArray s               -- ^ Destination
       -> Ptr Word8              -- ^ Source
       -> Int                    -- ^ Count
       -> ST s ()
-copyP (MArray dst#) dstOff@(I# dstOff#) (Ptr src#) count@(I# count#)
+copyP (MutableByteArray dst#) dstOff@(I# dstOff#) (Ptr src#) count@(I# count#)
 #if defined(ASSERTS)
   | count < 0 = error $
     "copyP: count must be >= 0, but got " ++ show count
@@ -310,7 +306,7 @@ compareInternal
       -> Int                    -- ^ Offset into second
       -> Int                    -- ^ Count
       -> Int
-compareInternal (Array src1#) (I# off1#) (Array src2#) (I# off2#) (I# count#) = i
+compareInternal (ByteArray src1#) (I# off1#) (ByteArray src2#) (I# off2#) (I# count#) = i
   where
 #if MIN_VERSION_base(4,11,0)
     i = I# (compareByteArrays# src1# off1# src2# off2# count#)
