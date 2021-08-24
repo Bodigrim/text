@@ -1688,23 +1688,27 @@ words (Text arr off len) = loop 0 0
     loop !start !n
         | n >= len = if start == n
                      then []
-                     else [Text arr (start+off) (n-start)]
+                     else [Text arr (start + off) (n - start)]
         -- Spaces in UTF-8 take either 1 byte for 0x09..0x0D + 0x20
         | isAsciiSpace w0 =
             if start == n
-            then loop (n+1) (n+1)
-            else Text arr (start+off) (n-start) : loop (n+1) (n+1)
+            then loop (n + 1) (n + 1)
+            else Text arr (start + off) (n - start) : loop (n + 1) (n + 1)
+        | w0 < 0x80 = loop start (n + 1)
         -- or 2 bytes for 0xA0
-        | w0 == 194, w1 == 160 =
+        | w0 == 0xC2, w1 == 0xA0 =
             if start == n
-            then loop (n+2) (n+2)
-            else Text arr (start+off) (n-start) : loop (n+2) (n+2)
+            then loop (n + 2) (n + 2)
+            else Text arr (start + off) (n - start) : loop (n + 2) (n + 2)
+        | w0 < 0xE0 = loop start (n + 2)
         -- or 3 bytes for 0x1680 + 0x2000..0x200A + 0x2028..0x2029 + 0x202F + 0x205F + 0x3000
-        | w0 - 225 < 3, isSpace (chr3 w0 w1 w2) =
+        |  w0 == 0xE1 && w1 == 0x9A && w2 == 0x80
+        || w0 == 0xE2 && (w1 == 0x80 && isSpace (chr3 w0 w1 w2) || w1 == 0x81 && w2 == 0x9F)
+        || w0 == 0xE3 && w1 == 0x80 && w2 == 0x80 =
             if start == n
-            then loop (n+3) (n+3)
-            else Text arr (start+off) (n-start) : loop (n+3) (n+3)
-        | otherwise = loop start (n+1)
+            then loop (n + 3) (n + 3)
+            else Text arr (start + off) (n - start) : loop (n + 3) (n + 3)
+        | otherwise = loop start (n + utf8LengthByLeader w0)
         where
             w0 = A.unsafeIndex arr (off + n)
             w1 = A.unsafeIndex arr (off + n + 1)
