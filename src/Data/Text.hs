@@ -223,7 +223,7 @@ import Data.Binary (Binary(get, put))
 import Data.Monoid (Monoid(..))
 import Data.Semigroup (Semigroup(..))
 import Data.String (IsString(..))
-import Data.Text.Internal.Encoding.Utf8 (utf8Length, utf8LengthByLeader, chr2, chr3, chr4)
+import Data.Text.Internal.Encoding.Utf8 (utf8Length, utf8LengthByLeader, chr2, chr3, chr4, ord2, ord3, ord4)
 import qualified Data.Text.Internal.Fusion as S
 import qualified Data.Text.Internal.Fusion.Common as S
 import Data.Text.Encoding (decodeUtf8', encodeUtf8)
@@ -636,8 +636,62 @@ intercalate t = concat . L.intersperse t
 -- "S.H.I.E.L.D"
 --
 -- Performs replacement on invalid scalar values.
-intersperse     :: Char -> Text -> Text
-intersperse c t = unstream (S.intersperse (safe c) (stream t))
+intersperse :: Char -> Text -> Text
+intersperse c t@(Text src (I# o) (I# l)) = if I# l == 0 then mempty else runST $ do
+    let !cLen@(I# cLen#) = utf8Length c
+        dstLen = I# l + length t P.* cLen
+
+    dst <- A.new dstLen
+
+    let writeSep = case cLen of
+          1 -> \dstOff ->
+            A.unsafeWrite dst (I# dstOff) (ord8 c)
+          2 -> let (c0, c1) = ord2 c in \dstOff -> do
+            A.unsafeWrite dst (I# dstOff) c0
+            A.unsafeWrite dst (I# dstOff + 1) c1
+          3 -> let (c0, c1, c2) = ord3 c in \dstOff -> do
+            A.unsafeWrite dst (I# dstOff) c0
+            A.unsafeWrite dst (I# dstOff + 1) c1
+            A.unsafeWrite dst (I# dstOff + 2) c2
+          _ -> let (c0, c1, c2, c3) = ord4 c in \dstOff -> do
+            A.unsafeWrite dst (I# dstOff) c0
+            A.unsafeWrite dst (I# dstOff + 1) c1
+            A.unsafeWrite dst (I# dstOff + 2) c2
+            A.unsafeWrite dst (I# dstOff + 3) c3
+    let go !srcOff !dstOff = if I# srcOff >= I# o + I# l then return () else do
+          let m0 = A.unsafeIndex src (I# srcOff)
+              m1 = A.unsafeIndex src (I# srcOff + 1)
+              m2 = A.unsafeIndex src (I# srcOff + 2)
+              m3 = A.unsafeIndex src (I# srcOff + 3)
+              !(I# d) = utf8LengthByLeader m0
+          case d of
+            1# -> do
+              A.unsafeWrite dst (I# dstOff) m0
+              writeSep (dstOff +# 1#)
+              go (srcOff +# 1#) (dstOff +# 1# +# cLen#)
+            2# -> do
+              A.unsafeWrite dst (I# dstOff)     m0
+              A.unsafeWrite dst (I# dstOff + 1) m1
+              writeSep (dstOff +# 2#)
+              go (srcOff +# 2#) (dstOff +# 2# +# cLen#)
+            3# -> do
+              A.unsafeWrite dst (I# dstOff)     m0
+              A.unsafeWrite dst (I# dstOff + 1) m1
+              A.unsafeWrite dst (I# dstOff + 2) m2
+              writeSep (dstOff +# 3#)
+              go (srcOff +# 3#) (dstOff +# 3# +# cLen#)
+            _ -> do
+              A.unsafeWrite dst (I# dstOff)     m0
+              A.unsafeWrite dst (I# dstOff + 1) m1
+              A.unsafeWrite dst (I# dstOff + 2) m2
+              A.unsafeWrite dst (I# dstOff + 3) m3
+              writeSep (dstOff +# 4#)
+              go (srcOff +# 4#) (dstOff +# 4# +# cLen#)
+
+    go o 0#
+    arr <- A.unsafeFreeze dst
+    return (Text arr 0 (dstLen - cLen))
+
 {-# INLINE [1] intersperse #-}
 
 -- | /O(n)/ Reverse the characters of a string.
@@ -1921,6 +1975,9 @@ copy (Text arr off len) = Text (A.run go) 0 len
       marr <- A.new len
       A.copyI marr 0 arr off len
       return marr
+
+ord8 :: Char -> Word8
+ord8 = P.fromIntegral . ord
 
 intToCSize :: Int -> CSize
 intToCSize = P.fromIntegral
