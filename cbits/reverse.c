@@ -13,23 +13,23 @@ void _hs_text_reverse(uint8_t *dst0, const uint8_t *src0, size_t off, size_t len
 
   while (src < srcend){
     uint8_t leadByte = *src++;
-    if (leadByte >= 0xf0){
+    if (leadByte < 0x80){
+      *dst-- = leadByte;
+    } else if (leadByte < 0xe0){
+      *(dst-1) = leadByte;
+      *dst     = *src++;
+      dst-=2;
+    } else if (leadByte < 0xf0){
+      *(dst-2) = leadByte;
+      *(dst-1) = *src++;
+      *dst     = *src++;
+      dst-=3;
+    } else {
       *(dst-3) = leadByte;
       *(dst-2) = *src++;
       *(dst-1) = *src++;
       *dst     = *src++;
       dst-=4;
-    } else if(leadByte >= 0xe0){
-      *(dst-2) = leadByte;
-      *(dst-1) = *src++;
-      *dst     = *src++;
-      dst-=3;
-    } else if(leadByte >= 0xc0){
-      *(dst-1) = leadByte;
-      *dst     = *src++;
-      dst-=2;
-    } else {
-      *dst-- = leadByte;
     }
   }
 }
