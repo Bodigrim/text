@@ -1806,11 +1806,11 @@ lines (Text arr@(A.ByteArray arr#) off len) = go off
       | otherwise = Text arr n delta : go (n + delta + 1)
       where
         delta = cSsizeToInt $ unsafeDupablePerformIO $
-          memchrNL arr# (intToCSize n) (intToCSize (len + off - n))
+          memchr arr# (intToCSize n) (intToCSize (len + off - n)) 0x0A
 {-# INLINE lines #-}
 
-foreign import ccall unsafe "_hs_text_memchr_NL" memchrNL
-    :: ByteArray# -> CSize -> CSize -> IO CSsize
+foreign import ccall unsafe "_hs_text_memchr" memchr
+    :: ByteArray# -> CSize -> CSize -> Word8 -> IO CSsize
 
 -- | /O(n)/ Joins lines, after appending a terminating newline to
 -- each.

@@ -13,8 +13,8 @@ int _hs_text_memcmp(const void *a, size_t aoff, const void *b, size_t boff,
   return memcmp(a + aoff, b + boff, n);
 }
 
-ssize_t _hs_text_memchr_NL(const void *a, size_t aoff, size_t n)
+ssize_t _hs_text_memchr(const void *a, size_t aoff, size_t n, uint8_t byte)
 {
-  const void *ptr = memchr(a + aoff, 0x0A, n);
+  const void *ptr = memchr(a + aoff, byte, n);
   return ptr == NULL ? -1 : ptr - (a + aoff);
 }
