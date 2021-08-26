@@ -1,4 +1,6 @@
 {-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnliftedFFITypes #-}
 
 -- |
 -- Module      : Data.Text.Lazy.Search
@@ -30,7 +32,11 @@ import qualified Data.Text.Internal as T
 import qualified Data.Text as T (concat)
 import Data.Text.Internal.Fusion.Types (PairS(..))
 import Data.Text.Internal.Lazy (Text(..), foldrChunks, equal)
+import Data.Text.Unsafe (unsafeDupablePerformIO)
 import Data.Bits ((.|.), (.&.))
+import Foreign.C.Types
+import GHC.Exts (ByteArray#)
+import System.Posix.Types (CSsize(..))
 
 -- | /O(n+m)/ Find the offsets of all non-overlapping indices of
 -- @needle@ within @haystack@.
@@ -43,24 +49,28 @@ import Data.Bits ((.|.), (.&.))
 indices :: Text              -- ^ Substring to search for (@needle@)
         -> Text              -- ^ Text to search in (@haystack@)
         -> [Int64]
-indices needle haystack
-    | nlen <= 0  = []
-    | nlen == 1  = indicesOne (nindex 0) 0 haystack
-    | otherwise  = advance haystack 0 0
+indices needle
+    | nlen <= 0  = const []
+    | nlen == 1  = indicesOne (A.unsafeIndex narr noff) 0
+    | otherwise  = advance 0 0
   where
     T.Text narr noff nlen = T.concat (foldrChunks (:) [] needle)
 
-    advance Empty !_ !_ = []
-    advance xxs@(Chunk x@(T.Text xarr xoff l) xs) !(g :: Int64) !(i :: Int)
-         | i >= l = advance xs g (i - l)
+    advance !_ !_ Empty = []
+    advance !(g :: Int64) !(i :: Int) xxs@(Chunk x@(T.Text xarr@(A.ByteArray xarr#) xoff l) xs)
+         | i >= l = advance g (i - l) xs
          | lackingHay (i + nlen) x xs  = []
-         | c == z && candidateMatch    = g : advance xxs (g + intToInt64 nlen) (i + nlen)
-         | otherwise                   = advance xxs (g + intToInt64 delta) (i + delta)
+         | c == z && candidateMatch    = g : advance (g + intToInt64 nlen) (i + nlen) xxs
+         | otherwise                   = advance (g + intToInt64 delta) (i + delta) xxs
        where
          c = index xxs (i + nlast)
          delta | nextInPattern = nlen + 1
                | c == z        = skip + 1
-               | otherwise     = 1
+               | l >= i + nlen = case unsafeDupablePerformIO $
+                  memchr xarr# (intToCSize (xoff + i + nlen)) (intToCSize (l - i - nlen)) z of
+                    -1 -> max 1 (l - i - nlen)
+                    s  -> cSsizeToInt s + 1
+                | otherwise = 1
          nextInPattern         = mask .&. swizzle (index xxs (i + nlen)) == 0
 
          candidateMatch
@@ -69,7 +79,6 @@ indices needle haystack
             Chunk (T.Text narr (noff + l - i) (nlen - l + i)) Empty `equal` xs
 
     nlast     = nlen - 1
-    nindex i  = A.unsafeIndex narr (noff + i)
     z         = A.unsafeIndex narr (noff + nlen - 1)
     (mask :: Word64) :*: skip = buildTable 0 0 0 (nlen-2)
 
@@ -118,3 +127,12 @@ intToInt64 = fromIntegral
 
 word8ToInt :: Word8 -> Int
 word8ToInt = fromIntegral
+
+intToCSize :: Int -> CSize
+intToCSize = fromIntegral
+
+cSsizeToInt :: CSsize -> Int
+cSsizeToInt = fromIntegral
+
+foreign import ccall unsafe "_hs_text_memchr" memchr
+    :: ByteArray# -> CSize -> CSize -> Word8 -> IO CSsize
