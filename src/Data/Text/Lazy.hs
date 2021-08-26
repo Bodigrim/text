@@ -1412,23 +1412,27 @@ chunksOf k = go
 -- | /O(n)/ Breaks a 'Text' up into a list of 'Text's at
 -- newline 'Char's. The resulting strings do not contain newlines.
 lines :: Text -> [Text]
-lines = foldrChunks go []
+lines Empty = []
+lines (Chunk c cs)
+  | hasNlEnd c = P.map fromStrict (T.lines c) ++ lines cs
+  | otherwise = case T.lines c of
+    [] -> error "lines: unexpected empty chunk"
+    l : ls -> go l ls cs
   where
-    go :: T.Text -> [Text] -> [Text]
-    go t@(T.Text arr off len) xxs = case xxs of
-      [] -> P.map fromStrict lls
-      x : xs
-        | A.unsafeIndex arr (off + len - 1) == 0x0A ->
-          P.map fromStrict lls ++ xxs
-        | otherwise -> case lls of
-          [] -> xxs
-          l : ls -> inner l ls x xs
-      where
-        lls = T.lines t
+    go l [] Empty = [fromStrict l]
+    go l [] (Chunk x xs) = case T.lines x of
+      [] -> error "lines: unexpected empty chunk"
+      [xl]
+        | hasNlEnd x -> chunk l (fromStrict xl) : lines xs
+        | otherwise  -> go (l `T.append` xl) [] xs
+      xl : yl : yls -> chunk l (fromStrict xl) :
+        if hasNlEnd x
+        then P.map fromStrict (yl : yls) ++ lines xs
+        else go yl yls xs
+    go l (m : ms) xs = fromStrict l : go m ms xs
 
-    inner :: T.Text -> [T.Text] -> Text -> [Text] -> [Text]
-    inner a [] b bs = chunk a b : bs
-    inner a (a' : as) b bs = fromStrict a : inner a' as b bs
+hasNlEnd :: T.Text -> Bool
+hasNlEnd (T.Text arr off len) = A.unsafeIndex arr (off + len - 1) == 0x0A
 
 -- | /O(n)/ Breaks a 'Text' up into a list of words, delimited by 'Char's
 -- representing white space.
