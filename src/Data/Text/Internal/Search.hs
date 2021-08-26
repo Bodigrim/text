@@ -1,4 +1,6 @@
 {-# LANGUAGE BangPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnliftedFFITypes #-}
 
 -- |
 -- Module      : Data.Text.Internal.Search
@@ -35,6 +37,10 @@ import qualified Data.Text.Array as A
 import Data.Word (Word64, Word8)
 import Data.Text.Internal (Text(..))
 import Data.Bits ((.|.), (.&.), unsafeShiftL)
+import Data.Text.Unsafe (unsafeDupablePerformIO)
+import Foreign.C.Types
+import GHC.Exts (ByteArray#)
+import System.Posix.Types (CSsize(..))
 
 data T = {-# UNPACK #-} !Word64 :* {-# UNPACK #-} !Int
 
@@ -49,7 +55,6 @@ indices :: Text                -- ^ Substring to search for (@needle@)
         -> Text                -- ^ Text to search in (@haystack@)
         -> [Int]
 indices (Text narr noff nlen)
-  | nlen == 1 = scanOne (A.unsafeIndex narr noff)
   | nlen <= 0 = const []
   | otherwise = scan
   where
@@ -67,7 +72,7 @@ indices (Text narr noff nlen)
     swizzle :: Word8 -> Word64
     swizzle !k = 1 `unsafeShiftL` (word8ToInt k .&. 0x3f)
 
-    scan (Text harr hoff hlen) = loop (hoff + nlen) where
+    scan (Text harr@(A.ByteArray harr#) hoff hlen) = loop (hoff + nlen) where
       loop !i
         | i > hlen + hoff
         = []
@@ -80,17 +85,19 @@ indices (Text narr noff nlen)
         | mask .&. swizzle (A.unsafeIndex harr i) == 0
         = loop (i + nlen + 1)
         | otherwise
-        = loop (i + 1)
+        = case unsafeDupablePerformIO $ memchr harr# (intToCSize i) (intToCSize (hlen + hoff - i)) z of
+          -1 -> []
+          x  -> loop (i + cSsizeToInt x + 1)
 {-# INLINE indices #-}
-
-scanOne :: Word8 -> Text -> [Int]
-scanOne c (Text harr hoff hlen) = loop 0
-  where
-    loop !i
-      | i >= hlen                        = []
-      | A.unsafeIndex harr (hoff+i) == c = i : loop (i+1)
-      | otherwise                        = loop (i+1)
-{-# INLINE scanOne #-}
 
 word8ToInt :: Word8 -> Int
 word8ToInt = fromIntegral
+
+intToCSize :: Int -> CSize
+intToCSize = fromIntegral
+
+cSsizeToInt :: CSsize -> Int
+cSsizeToInt = fromIntegral
+
+foreign import ccall unsafe "_hs_text_memchr" memchr
+    :: ByteArray# -> CSize -> CSize -> Word8 -> IO CSsize
