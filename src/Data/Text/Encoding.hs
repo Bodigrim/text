@@ -457,7 +457,7 @@ encodeUtf8 (Text arr off len)
   -- but this is undesirable when len is significantly smaller than length arr.
   | otherwise = unsafeDupablePerformIO $ do
     marr@(A.MutableByteArray mba) <- unsafeSTToIO $ A.newPinned len
-    unsafeSTToIO $ A.copyI marr 0 arr off len
+    unsafeSTToIO $ A.copyI len marr 0 arr off
     let fp = ForeignPtr (byteArrayContents# (unsafeCoerce# mba))
                         (PlainPtr mba)
     pure $ B.fromForeignPtr fp 0 len

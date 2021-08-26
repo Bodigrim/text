@@ -764,10 +764,10 @@ replace needle@(Text _      _      neeLen)
       let loop (i:is) o d = do
             let d0 = d + i - o
                 d1 = d0 + repLen
-            A.copyI marr d  hayArr (hayOff+o) (i - o)
-            A.copyI marr d0 repArr repOff repLen
+            A.copyI (i - o) marr d  hayArr (hayOff+o)
+            A.copyI repLen  marr d0 repArr repOff
             loop is (i + neeLen) d1
-          loop []     o d = A.copyI marr d hayArr (hayOff+o) (len - d)
+          loop []     o d = A.copyI (len - d) marr d hayArr (hayOff+o)
       loop ixs 0 0
       return marr
 
@@ -979,7 +979,7 @@ concat ts = case ts' of
     go :: ST s (A.MArray s)
     go = do
       arr <- A.new len
-      let step i (Text a o l) = A.copyI arr i a o l >> return (i + l)
+      let step i (Text a o l) = A.copyI l arr i a o >> return (i + l)
       foldM step 0 ts' >> return arr
 
 -- | /O(n)/ Map a function over a 'Text' that results in a 'Text', and
@@ -1135,7 +1135,7 @@ replicate n t@(Text a o l)
     | otherwise              = runST $ do
         let totalLen = n `mul` l
         marr <- A.new totalLen
-        A.copyI marr 0 a o l
+        A.copyI l marr 0 a o
         A.tile marr l
         arr  <- A.unsafeFreeze marr
         return $ Text arr 0 totalLen
@@ -1973,7 +1973,7 @@ copy (Text arr off len) = Text (A.run go) 0 len
     go :: ST s (A.MArray s)
     go = do
       marr <- A.new len
-      A.copyI marr 0 arr off len
+      A.copyI len marr 0 arr off
       return marr
 
 ord8 :: Char -> Word8

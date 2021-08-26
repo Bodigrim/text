@@ -256,13 +256,13 @@ copyM dst@(MutableByteArray dst#) dstOff@(I# dstOff#) src@(MutableByteArray src#
 {-# INLINE copyM #-}
 
 -- | Copy some elements of an immutable array.
-copyI :: MArray s               -- ^ Destination
+copyI :: Int                    -- ^ Count
+      -> MArray s               -- ^ Destination
       -> Int                    -- ^ Destination offset
       -> Array                  -- ^ Source
       -> Int                    -- ^ Source offset
-      -> Int                    -- ^ Count
       -> ST s ()
-copyI (MutableByteArray dst#) dstOff@(I# dstOff#) (ByteArray src#) (I# srcOff#) count@(I# count#)
+copyI count@(I# count#) (MutableByteArray dst#) dstOff@(I# dstOff#) (ByteArray src#) (I# srcOff#)
 #if defined(ASSERTS)
   | count < 0 = error $
     "copyI: count must be >= 0, but got " ++ show count

@@ -103,8 +103,8 @@ append a@(Text arr1 off1 len1) b@(Text arr2 off2 len2)
       x :: ST s (A.MArray s)
       x = do
         arr <- A.new len
-        A.copyI arr 0 arr1 off1 len1
-        A.copyI arr len1 arr2 off2 len2
+        A.copyI len1 arr 0 arr1 off1
+        A.copyI len2 arr len1 arr2 off2
         return arr
 {-# NOINLINE append #-}
 
