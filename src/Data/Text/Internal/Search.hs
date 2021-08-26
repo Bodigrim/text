@@ -48,44 +48,49 @@ data T = {-# UNPACK #-} !Word64 :* {-# UNPACK #-} !Int
 indices :: Text                -- ^ Substring to search for (@needle@)
         -> Text                -- ^ Text to search in (@haystack@)
         -> [Int]
-indices _needle@(Text narr noff nlen) _haystack@(Text harr hoff hlen)
-    | nlen == 1              = scanOne (nindex 0)
-    | nlen <= 0 || ldiff < 0 = []
-    | otherwise              = scan 0
+indices (Text narr noff nlen)
+  | nlen == 1 = scanOne (A.unsafeIndex narr noff)
+  | nlen <= 0 = const []
+  | otherwise = scan
   where
-    ldiff    = hlen - nlen
     nlast    = nlen - 1
-    z        = nindex nlast
+    !z       = nindex nlast
     nindex k = A.unsafeIndex narr (noff+k)
-    hindex k = A.unsafeIndex harr (hoff+k)
-    hindex' k | k == hlen  = 0
-              | otherwise = A.unsafeIndex harr (hoff+k)
     buildTable !i !msk !skp
         | i >= nlast           = (msk .|. swizzle z) :* skp
         | otherwise            = buildTable (i+1) (msk .|. swizzle c) skp'
-        where c                = nindex i
+        where !c               = nindex i
               skp' | c == z    = nlen - i - 2
                    | otherwise = skp
     !(mask :* skip) = buildTable 0 0 (nlen-2)
 
     swizzle :: Word8 -> Word64
-    swizzle k = 1 `unsafeShiftL` (word8ToInt k .&. 0x3f)
+    swizzle !k = 1 `unsafeShiftL` (word8ToInt k .&. 0x3f)
 
-    scan !i
-        | i > ldiff                  = []
-        | c == z && A.equal narr noff harr (hoff + i) nlen
-                                     = i : scan (i + nlen)
-        | otherwise                  = scan (i + delta)
-        where c = hindex (i + nlast)
-              delta | nextInPattern = nlen + 1
-                    | c == z        = skip + 1
-                    | otherwise     = 1
-                where nextInPattern = mask .&. swizzle (hindex' (i+nlen)) == 0
-    scanOne c = loop 0
-        where loop !i | i >= hlen     = []
-                      | hindex i == c = i : loop (i+1)
-                      | otherwise     = loop (i+1)
+    scan (Text harr hoff hlen) = loop (hoff + nlen) where
+      loop !i
+        | i > hlen + hoff
+        = []
+        | A.unsafeIndex harr (i - 1) == z
+        = if A.equal narr noff harr (i - nlen) nlen
+          then i - nlen : loop (i + nlen)
+          else            loop (i + skip + 1)
+        | i == hlen + hoff
+        = []
+        | mask .&. swizzle (A.unsafeIndex harr i) == 0
+        = loop (i + nlen + 1)
+        | otherwise
+        = loop (i + 1)
 {-# INLINE indices #-}
+
+scanOne :: Word8 -> Text -> [Int]
+scanOne c (Text harr hoff hlen) = loop 0
+  where
+    loop !i
+      | i >= hlen                        = []
+      | A.unsafeIndex harr (hoff+i) == c = i : loop (i+1)
+      | otherwise                        = loop (i+1)
+{-# INLINE scanOne #-}
 
 word8ToInt :: Word8 -> Int
 word8ToInt = fromIntegral
