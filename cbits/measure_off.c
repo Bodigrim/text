@@ -130,6 +130,9 @@ typedef const ssize_t (*measure_off_t) (const uint8_t*, const uint8_t*, size_t);
   as well.
 
   This scheme allows us to implement both take/drop and length with the same C function.
+
+  The input buffer (src, off, len) must be a valid UTF-8 sequence,
+  this condition is not checked.
 */
 ssize_t _hs_text_measure_off(const uint8_t *src, size_t off, size_t len, size_t cnt) {
   static _Atomic measure_off_t s_impl = (measure_off_t)NULL;
