@@ -5,6 +5,13 @@
 #include <string.h>
 #include <stdint.h>
 
+/*
+  _hs_text_reverse takes a UTF-8 encoded buffer, specified by (src0, off, len),
+  and reverses it, writing output starting from dst0.
+
+  The input buffer (src0, off, len) must be a valid UTF-8 sequence,
+  this condition is not checked.
+*/
 void _hs_text_reverse(uint8_t *dst0, const uint8_t *src0, size_t off, size_t len)
 {
   const uint8_t *src = src0 + off;
