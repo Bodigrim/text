@@ -39,7 +39,7 @@ jobs:
       # test broken linking on windows: https://github.com/haskell/text/issues/450
       run: |
         $bin = cabal list-bin text-tests
-        # $env:PATH = ''
+        $env:PATH = ''
         & "$bin"
       shell: pwsh
     - name: Haddock
