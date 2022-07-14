@@ -224,7 +224,7 @@ source-repository head
   type:     git
   location: https://github.com/haskell/text
 
-test-suite tests
+test-suite text-tests
   type:           exitcode-stdio-1.0
   ghc-options:
     -Wall -threaded -rtsopts
